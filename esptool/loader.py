@@ -1201,7 +1201,20 @@ class ESPLoader(object):
                     to_offs = from_offs + self.ESP_RAM_BLOCK
                     self.mem_block(field[from_offs:to_offs], seq)
         print("Running stub...")
-        self.mem_finish(stub.entry)
+        if self.CHIP_NAME == "ESP32-S3":
+            self.mem_finish(0)
+            rom_spiflash_legacy_funcs_read_ptr = (
+                0x3FCEF688  # got with GDB - p &rom_spiflash_legacy_funcs.read
+            )
+            stored_pointer = self.read_reg(rom_spiflash_legacy_funcs_read_ptr)
+            self.write_reg(rom_spiflash_legacy_funcs_read_ptr, stub.entry)
+            self.command(
+                self.ESP_READ_FLASH_SLOW,
+                struct.pack("<II", 0, 0),
+                wait_response=False,
+            )
+        else:
+            self.mem_finish(stub.entry)
         try:
             p = self.read()
         except StopIteration:
@@ -1213,6 +1226,8 @@ class ESPLoader(object):
 
         if p != b"OHAI":
             raise FatalError(f"Failed to start stub. Unexpected response: {p}")
+        if self.CHIP_NAME == "ESP32-S3":
+            self.write_reg(rom_spiflash_legacy_funcs_read_ptr, stored_pointer)
         print("Stub running...")
         return self.STUB_CLASS(self)
 
